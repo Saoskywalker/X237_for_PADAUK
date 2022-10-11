@@ -1,0 +1,584 @@
+//===============================================================================
+//PMC150-S08A SOP8 150mil 引脚图    第一版 OK
+//1 VDD            8 GND
+//2 PA7            7 PA0/INT0
+//3 PA6            6 PA4
+//4 PA5/PRST       5 PA3
+
+//PMS131-S08A SOP8 150mil 引脚图                             供应商给的规格书 OK
+//1 VDD            8 GND
+//2 PA6/X2         7 PA4/AD9/INT1A
+//3 PA5/PRSTB      6 PA3/AD8/PWM1
+//4 PB7/AD7/PWM2   5 PB1/AD1/Vref
+
+//===============================================================================
+//include---------------------------------------------------------------
+#include  "extern.h"
+//--------------------端口定义--------------------
+//PA    7  6  5  4  3  - -  0   //端口数据 (输入模式)读输入端口的高低数据 (输出模式)从端口输出高低数据
+//PAC   0  1  0  1  1  0 0  1   //1输出  0输入
+//PAPH  1  0  1  0  0  1 1  0   //1上拉  0禁用
+
+//PMS131-S08A SOP8 150mil 引脚图  
+//1 VDD            8 GND
+//2 PA6/X2         7 PA4/AD9/INT1A
+//3 PA5/PRSTB      6 PA3/AD8/PWM1
+//4 PB7/AD7/PWM2   5 PB1/AD1/Vref
+.ramadr 0
+word 	gwPoint;
+//.writer	package 8,1,32,6,7,3,2,32,8,0x000F,0x000F,0
+
+//PMS131-S08A SOP8 150mil 引脚图      供应商给的规格书
+#define LED_Out      PA.6//PIN2  输出
+#define Key_In       PA.5//PIN3  输入    上拉
+#define FAN_Out      PB.7//PIN4  输出
+#define FAN_AD_IN    PB.1//PIN5  输入    
+#define UV_Out       PA.3//PIN6  输出
+#define KM_PTC_Out   PA.4//PIN7  输出
+
+/*
+//PMC150-S08A SOP8 150mil 引脚图    第一版 OK
+#define KM_PTC_Out    PA.0//PIN7/KM_PTC /AD10/INT0  输出
+#define FAN_Out       PA.3//PIN5/FAN    /AD8/PWM1   输出
+#define UV_Out        PA.4//PIN6/UV     /AD9/INT1A  输出
+#define Key_In        PA.5//PIN4/KEY    /PRSTB      输入    上拉
+#define LED_Out       PA.6//PIN3/LED    /X2         输出
+#define PA_7_In       PA.7//PIN2/空     /X1         输入    上拉
+*/
+//--------------------全局变量定义--------------------
+BYTE   Sys_Flag=0;//
+BIT    f_Key_Trig  :  Sys_Flag.0;//
+BIT    f_LED_On    :  Sys_Flag.1;//
+BIT    t16_10ms    :  Sys_Flag.2;//
+BIT    t16_1s      :  Sys_Flag.3;//
+BIT    t16_over2   :  Sys_Flag.4;//
+BIT    t16_over3   :  Sys_Flag.5;//
+//BIT      :  Sys_Flag.6;//
+//BIT      :  Sys_Flag.7;//
+
+BYTE   WKT_Flag=0;//
+//BIT       :  WKT_Flag.0;//
+BIT    T_END_Star  :  WKT_Flag.1;//
+BIT    T_END       :  WKT_Flag.2;//
+//BIT       :  WKT_Flag.3;//
+//BIT       :  WKT_Flag.4;//
+//BIT       :  WKT_Flag.5;//
+//BIT       :  WKT_Flag.6;//
+//BIT       :  WKT_Flag.7;//
+
+BYTE   T_Cms;//
+WORD   T_C1s;//
+
+//--------------------------------------------------AD
+static	WORD	div_src2;
+static	BYTE	div_val, div_res;
+static	void	Word_Div_Byte (void);
+
+static	WORD	AD_DATE;//
+BYTE   FANTS;
+BYTE   FANDelay;
+WORD   FANTime;
+BYTE   Lgc_Flag=0;//
+BIT    TWork_Star  :  Lgc_Flag.0;//
+BIT    FAN_Alaim  :  Lgc_Flag.1;//
+//BIT      :  Lgc_Flag.2;//
+//BIT      :  Lgc_Flag.3;//
+//BIT      :  Lgc_Flag.4;//
+//BIT      :  Lgc_Flag.5;//
+//BIT      :  Lgc_Flag.6;//
+//BIT      :  Lgc_Flag.7;//
+D_AD_SAMPLE_NUM			equ	6					//AD采样样品的个数
+D_AD_SHIFT_NUM			equ	2					//这个值设定和D_AD_SAMPLE_NUM相关
+
+word adc_avg_value;
+
+
+D_NTC_TIMES				equ	D_AD_SAMPLE_NUM		//这里的值必须和采样个数值相同(平均值计算采样次数)
+
+word	gwNTCValTmp[D_NTC_TIMES];
+word	gwNTCVal;
+D_NTC_CHANGE_TIMES		equ	5
+
+
+m_addone_wait			macro
+	AD_START = 1;
+	while(!AD_DONE) NULL;
+//	gwAdVal = (adcrh << 8 | adcrl);
+//	gwAdVal =  gwAdVal >> 4;
+	AD_DATE$1 = adcrh;
+	AD_DATE$0 = adcrl;
+	AD_DATE >>= 4;
+						endm
+						
+void	ADC_init(void)
+{
+	//注：选择的通道需设置为输入，无上拉电阻，停用数字输入；
+	PBC.1 = 0;
+	PBPH.1 = 0;
+	$ PBDIER 0b0110_1001;
+	$ ADCC	Enable,PB4;	//启用ADC功能，通道选择（AD转换的输入信号）
+						//启用：Enable；停用：Disable
+						//通道选择：PB0, PB1, PB2, PB3, PB4, PB5, PB6, PB7, PA3, PA4, PA0, ADC
+	$ ADCM	12bit,/2;	//位分辨率，时钟源选择（系统时钟/X）
+						//位分辨率有：8BIT, 9BIT, 10BIT, 11BIT, 12BIT
+						//8bit	=>	adcrh[7:0]		~		12bit	=>	adcrh[7:0],adcrl[7:4]
+						//X有/1, /2, /4, /8, /16, /32, /64, /128
+						//注：时钟源选择建议选用500K（/2）
+	$ ADCRGC VDD;		//选择ADC参考高电压，通道F选择器（注：通道F是GPCC选择ADC模式时才有用）
+						//选择参考电压有：VDD, 2V, 3V, 4V, PB1, BG，通道F选择器：ADC_BG（Band-gap参考电压）, ADC_VDD/4（0.25*VDD）
+	.delay 400;			//延时400us
+						//注：根据ADC参考高电压及时钟源选择，参考datasheet延迟
+}
+
+void	ADC_data(void)
+{
+	//开始ADC转换
+	AD_START = 1;		//开始ADC转换
+	while(!AD_DONE)		//等待ADC转换结果
+		NULL;
+	//当AD_DONE高电位时读取ADC结果
+	word	data;
+	data$0 = ADCRL;		//将ADC的值赋给data
+	data$1 = ADCRH;
+	AD_DATE = data >> 4;	//12 bit ADC，如果是11bit则右移5，以此类推
+}
+//********************************************************************************
+//						ADC 采样子函数
+//
+//================================================================================
+//功能	:	输入 D_AD_SAMPLE_NUM 个数据去掉最大最小值,求平均
+//输入	:	存放数据的RAM首地址
+//变量	:	gwAdVal		gwPoint
+//--------------------------------------------------------------------------------
+void CalculateAverage(void)
+{
+	byte i;
+	word tmp;
+	word min,max;
+	word sum;
+	
+	gwPoint = a;
+	sum = 0;
+	i = 0;
+	do
+	{
+		tmp$0 = *gwPoint;			//取低位
+		gwPoint++;
+		tmp$1 = *gwPoint;			//取高位
+		gwPoint++;
+		if(0 == i)
+		{
+			min = tmp;
+			max = tmp;
+		}
+		if(tmp > max)
+		{
+			max = tmp;
+		}
+		if(tmp < min)
+		{
+			min = tmp;
+		}
+		sum += tmp;
+		i++;
+	}while(i < D_AD_SAMPLE_NUM);
+	sum = sum - min - max;
+	tmp = sum >> D_AD_SHIFT_NUM;
+	AD_DATE = tmp;					//平均值
+}
+void ntc_AdcCycle(void)
+{
+	byte i;
+	word tmp[D_AD_SAMPLE_NUM];
+	$ adcm /8;
+	$ adcrgc VDD;
+	$ adcc enable,Pb4;
+	m_addone_wait					//第一次采样值丢弃	
+	i = 0;
+	gwPoint = &tmp[0];
+	do
+	{
+		m_addone_wait
+		*gwPoint = AD_DATE;				//存低位
+		gwPoint++;
+		*gwPoint = AD_DATE >> 8;		//存高位
+		gwPoint++;
+		i++;
+	}while(i < D_AD_SAMPLE_NUM);
+	//取平均
+	a = &tmp[0];
+	CalculateAverage();
+}
+//--------------------------------------------------Define End
+//--------------------------------------------------main Star
+void FPPA0(void)
+{
+//--------------------时钟配置--------------------
+	.ADJUST_IC	SYSCLK=IHRC/4, IHRC=16MHz, VDD=5V;
+//--------------------端口配置--------------------
+  PADIER=0xFF;//启用仿真器
+//  $  PADIER PA;//启用仿真器
+
+
+/*
+//PMS131-S08A SOP8 150mil 引脚图
+#define LED_Out      PA.6//PIN2  输出
+#define Key_In       PA.5//PIN3  输入    上拉
+#define FAN_Out      PB.7//PIN4  输出
+#define FAN_AD_IN    PB.1//PIN5  输入  
+#define UV_Out       PA.3//PIN6  输出
+#define KM_PTC_Out   PA.4//PIN7  输出
+*/
+
+  PA=0x00;   //0--3 4567//端口数据寄存器 (输入模式)读输入端口的高低数据 (输出模式)从端口输出高低数据
+  PAC=0xDF;  //0--3 4567//控制寄存器     0输入 1输出
+  PAPH=0x20; //0--3 4567//上拉控制寄存器 0禁用 1上拉开启
+  PB=0x00;   //0--3 4567//端口数据寄存器 (输入模式)读输入端口的高低数据 (输出模式)从端口输出高低数据
+  PBC=0xFE;  //0--3 4567//控制寄存器     0输入 1输出
+  PBPH=0x00; //0--3 4567//上拉控制寄存器 0禁用 1上拉开启
+
+/*
+//  $  PADIER PA;//启用仿真器    第一版 OK
+  PA=0x00;   //0--3 4567//端口数据寄存器 (输入模式)读输入端口的高低数据 (输出模式)从端口输出高低数据
+  PAC=0x59;  //0--3 4567//控制寄存器     0输入 1输出
+  PAPH=0xA6; //0--3 4567//上拉控制寄存器 0禁用 1上拉开启
+//  PAPH=_FIELD(Key_In);
+*/
+
+//PAPH=_FIELD(Key_In);
+KM_PTC_Out=0;
+FAN_Out=0;
+UV_Out=0;
+//Key_In=1;
+LED_Out=0;
+
+//--------------------定时器配置--------------------
+  $ T16M  IHRC,/1,BIT11; //16MHz/1=16MHz:the time base of T16.
+//--------------------局部变量定义--------------------
+  BYTE  Key_Flag;
+  BIT   f_Key_In  :  Key_Flag._BIT(Key_In);
+  Key_Flag=_FIELD(Key_In);
+
+  BYTE  t16_flag;
+  BYTE  count1,count2,count3;
+  BYTE  cnt_Key_10ms=4;        //  Key debounce time = 40 mS
+
+  WORD    T16_Cnt, T_100mS;
+  ldt16   T16_Cnt;
+
+  BYTE  K_cmt;
+  BYTE  t_cmt;
+
+t_cmt=0;
+TWork_Star=0;
+
+LED_Out=0;
+FAN_Out=0;
+UV_Out=0;
+KM_PTC_Out=0;
+
+
+FAN_Alaim=0;
+FANTS=0;
+
+//----------------------------------------------------------------------
+
+//ADCC&=0xC7; //5-2   0001
+//ADCC|=0x04;
+
+//ADCM=0x0;
+//ADCRGC=0;
+//ADCC=0x84;
+//ADC_init();
+
+FAN_AD_IN=1;
+  PBC=0xFC;  //0--3 4567//控制寄存器     0输入 1输出
+//PB.1=1;
+
+FANTS=0;//LED_Out=0;
+
+//AD_DATE=0;
+FANTime=0;
+
+while(1)//----------------------------------------------------------------------
+{
+
+  if(INTRQ.T16){INTRQ.T16=0;if(--count1==0){count1=39;t16_10ms=1;}}//定时器10mS  256uS*39=9,984uS≤10mS
+  if(T16_Cnt.15){t16_over3=1;}else if(t16_over3){t16_over3=0;if(--count3==0){count3=244;t16_1s=1;}}//4,096uS*244=999,424 uS≤1S
+  if(T16_Cnt.12){t16_over2=1;}else if(t16_over2){t16_over2=0;if(--count2==0){count2=195;T_100mS++;}}//512uS*195=99,840 uS≤100mS
+
+//  A=(t16_flag^T16_Cnt$1)&0x20;//Another way for calucate 100 mS
+//  if(!ZF){t16_flag^=A;if(--count2==0){count2=195;T_100mS++;}}// t16_flag.5^T15_Cnt.13
+
+
+while (t16_10ms)//10mS Star
+{ t16_10ms=0;
+ntc_AdcCycle();
+//--------------------------------------------------//KEY Star
+if(PA.5)//KEY ON
+{
+	K_cmt++;
+	if(K_cmt==10)//按键间隔100mS
+	{
+		t_cmt++;
+		if(t_cmt==1)//开机
+		{
+			LED_Out=1;
+			FAN_Out=1;
+			UV_Out=1;
+			KM_PTC_Out=0;
+			T_Cms=0;
+			T_C1s=0;
+			TWork_Star=1;
+
+			FAN_Alaim=0;
+			FANTS=0;
+
+			FANTime=0;
+			FANDelay=1;
+		}else//关机
+		{
+			t_cmt=0;//置按键关机
+
+			LED_Out=0;
+//			FAN_Out=0;
+			UV_Out=0;
+			KM_PTC_Out=0;
+
+			if(FAN_Alaim)
+			{
+				LED_Out=0;
+				FAN_Out=0;
+				UV_Out=0;
+				KM_PTC_Out=0;
+			}else//按键关机风扇倒计时1分钟
+			{
+				T_Cms=0;
+//				T_C1s=1804;
+//				T_C1s=24;//测试1
+				T_C1s=2374;//时间40min 50S
+
+				TWork_Star=1;//FAN 倒计时10秒
+			}
+			FAN_Alaim=0;
+			FANTime=0;
+			FANDelay=0;
+		}
+ 	}else 
+	if(K_cmt>10)//保持按键状态
+	{
+		K_cmt=20;
+	}//
+}else//抬键
+{
+	K_cmt=0;
+}
+//--------------------------------------------------//KEY end
+	if(FAN_Alaim==1)//LED灯闪
+	{
+		FANTS++;
+		if(FANTS==1){LED_Out=1;}else//按键间隔500mS
+		if(FANTS==21){LED_Out=0;}//按键间隔500mS
+		if(FANTS>51){FANTS=0;LED_Out=0;}//按键间隔500mS
+	}
+//--------------------------------------------------//Time 30min Work Star
+	if(TWork_Star)//10mS  Work Star  启动LED FAN UV 停止PTC
+	{
+//--------------------------------------------------//FAN AD Star
+		if(FANDelay==1)//风扇断线3秒倒计时
+		{
+			if(FANTime>300)//3秒后风扇未接
+			{
+				FANTime=0;
+				FANDelay=0;
+				FAN_Alaim=1;
+
+				LED_Out=0;
+//				FAN_Out=0;
+				UV_Out=0;
+				KM_PTC_Out=0;
+
+				T_Cms=0;
+				T_C1s=2424; //10秒
+				
+//				T_C1s=24;//测试2
+				TWork_Star=1;//FAN 倒计时10秒
+			}else//启动3秒风扇检测
+			{
+				FANTS=0;
+				FAN_Alaim=0;//关闭灯闪
+
+			//	ADCM=0x0;//8位，时钟   H=7-0   L=-
+
+//				ADCM=0x8E;//12位，比时钟慢128倍   H=7-0   L=7-4  AD=0  AD=H   AD=(AD<<4)+L
+
+			//	ADCRGC=0;
+			//	ADCC=0x84;
+			//	AD_Start=1;
+			//	.wait1	AD_Done;
+			//	div_src2=124*0x100;	//	= 0x7C00 : only for 1 word
+			//	AD_DATE=ADCRH;
+ADC_data();
+				if(AD_DATE<80)
+				{
+					FANTime++;
+				}else
+				{
+					FANTime=0;
+				}
+
+			}
+		}
+//--------------------------------------------------//FAN AD end
+
+	if(T_C1s==0)//启动LED UV灯 风扇
+	{
+			if(FAN_Alaim)
+			{
+				UV_Out=0;
+				KM_PTC_Out=0;
+			}else
+			{
+				LED_Out=1;
+				UV_Out=1;
+				FAN_Out=1;
+				KM_PTC_Out=0;
+			}
+	}
+	T_Cms++;
+	if(T_Cms>=100)//1S 时基
+	{
+		T_Cms=0;
+		T_C1s++;
+		if(T_C1s==5)//5S 启动PTC
+		{
+			if(FAN_Alaim)
+			{
+				UV_Out=0;
+				KM_PTC_Out=0;
+			}else
+			{
+				LED_Out=1;
+				UV_Out=1;
+				FAN_Out=1;
+				KM_PTC_Out=1;
+			}
+		}else//停止PTC和UV灯
+//		if(T_C1s==1805)//30min 5S  1800S/60=30min
+//		if(T_C1s==2345)//39min 5S  2340S/60=39min //时间38min 40S
+		if(T_C1s==2375)//39min 5S  2340S/60=39min //时间38min 40S+30S
+
+//		if(T_C1s==2465)//39min 5S  2340S/60=39min //时间40min 50S
+
+//		if(T_C1s==25)//测试3
+		{
+			if(FAN_Alaim)
+			{
+				UV_Out=0;
+				KM_PTC_Out=0;
+			}else
+			{
+				LED_Out=0;
+			    UV_Out=0;
+			    FAN_Out=1;
+				KM_PTC_Out=0;
+			}
+		}else//停止风扇
+//		if(T_C1s>=2145)//4min 55S =295S  1850+295=2145S    Work Over
+//		if(T_C1s>=2405)//40min 5S =2405S  2345+60=2405S    Work Over //时间38min 40S
+		if(T_C1s>=2435)//40min 5S =2405S  2345+60=2405S    Work Over //时间38min 40S+30S
+
+//		if(T_C1s>=2525)//40min 5S =2405S  2345+60=2405S    Work Over //时间40min 50S
+//		if(T_C1s>=35)//测试4
+		{
+			TWork_Star=0;//清除倒计时
+			T_Cms=0;
+			T_C1s=0;
+
+			if(FAN_Alaim)
+			{
+				UV_Out=0;
+			    FAN_Out=0;
+				KM_PTC_Out=0;
+			}else
+			{
+				t_cmt=0;//置按键关机
+
+				LED_Out=0;
+			    UV_Out=0;
+			    FAN_Out=0;
+				KM_PTC_Out=0;
+			}
+		}
+	}
+	}//End of Work Star
+//--------------------------------------------------//Time 30min end
+
+}//end of 10mS
+}//end of while(1)
+}//end of main
+
+//----------------------------------------------------------------------
+void Interrupt(void)
+{ pushaf;
+  if(Intrq.T16)//T16 Trig
+  { Intrq.T16=0;
+    //User can add code
+
+  }
+  popaf;
+}
+
+//static	WORD	div_src2;
+//static	BYTE	div_val, div_res;
+//static	void	Word_Div_Byte (void);
+
+/*
+  if(AD_Flag)
+  {
+  AD_Start	=	1;
+  .wait1	AD_Done;
+  //	VDD Voltage * (ADCRH / 256) = BandGap Voltage = 1240 mV
+  //	so, VDD Voltage = 1240 mV * (256 / ADCRH)
+//  .PRINTF	("VDD = %d mV", 1240 * 0x100 / ADCRH);
+  div_src2	=	124 * 0x100;	//	= 0x7C00 : only for 1 word
+  div_val		=	ADCRH;
+  Word_Div_Byte ();				//	div_src2 = 124 * 0x100 / ADCRH
+//  .PRINTF	("VDD = %d * 10 mV", div_src2);
+  .delay	4 * 1000 * 1000;		//	Every 1 S, calucate VDD
+  AD_DATE=div_val;
+
+if(AD_DATE>1){LED_Out=1;}else{LED_Out=0;}
+  }*/
+
+
+static	void	Word_Div_Byte (void)
+{	//	div_src2 / div_val	=	div_src2 * div_val	+	div_res
+	//	16		/	8		=	16		*	8		+	8
+
+/*
+	BYTE	div_cnt, div_tmp;
+	div_cnt	=	0;
+	div_res	=	0;
+	goto	div_shf;
+
+	do
+	{
+		slc		div_res;//左移1位，低位进位C
+		slc		div_tmp
+		div_cnt++;
+		div_res	-=	div_val;
+
+		if (!div_tmp.0 && CF)
+		{
+			div_res	+=	div_val;
+			CF	=	0;
+		}
+		else	CF	=	1;
+div_shf:
+		div_src2	<<<=	1;
+	} while (! div_cnt.4);
+*/
+}
+
+//--------------------------------------------------

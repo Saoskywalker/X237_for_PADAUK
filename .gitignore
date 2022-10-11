@@ -1,0 +1,7 @@
+/output
+/.vscode
+*.uvgui.*
+/OBJ/
+*.code-workspace
+arch/c51/CMS8S6990/keil/Listings
+arch/c51/CMS8S6990/keil/Objects
