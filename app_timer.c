@@ -32,7 +32,7 @@ void app_timer(void)
         {
             count_10ms = 0;
             app_timer_flag_10ms = 1;
-$ PA.6 TOGGLE;
+// $ PA.6 TOGGLE;
             count_100ms++;
             if(count_100ms>=10)
             {

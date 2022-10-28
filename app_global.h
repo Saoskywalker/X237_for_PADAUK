@@ -23,14 +23,14 @@
 //   uint8_t nc4 : 1;
 // } app_flag_type;
 
-// extern app_flag_type app_flag;
+// extern app_flag_type app_flag; //小众编译器不建议用结构体等, 有很多小毛病
 extern bit app_flag_sleep; //睡眠
 extern bit app_flag_sys_ready; //系统准备完毕
 extern bit app_flag_work; //工作
 extern bit app_flag_error; //系统错误
 extern bit app_flag_nc0;
 extern bit app_flag_nc1;
-extern bit app_flag_usb_inserted; //充电线插入
+extern bit app_flag_usb_insert; //充电线插入
 extern bit app_flag_charge_full; //充满电
 extern bit app_flag_ntc_error; //ntc AD错误
 extern bit app_flag_current_error; //电流AD错误

@@ -16,9 +16,9 @@ void Interrupt(void)
 		STT16 t16_cnt;
 		INTRQ.T16 = 0;
 
-		$ PA.3 TOGGLE;
+		// $ PA.3 TOGGLE;
 		app_timer();
-		$ PA.3 TOGGLE;
+		// $ PA.3 TOGGLE;
 	}
 
 	POPAF; //恢复ALU和FLAG寄存器

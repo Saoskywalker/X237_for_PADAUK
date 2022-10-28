@@ -54,7 +54,7 @@ bit app_flag_work; //工作
 bit app_flag_error; //系统错误
 bit app_flag_nc0;
 bit app_flag_nc1;
-bit app_flag_usb_inserted; //充电线插入
+bit app_flag_usb_insert; //充电线插入
 bit app_flag_charge_full; //充满电
 bit app_flag_ntc_error; //ntc AD错误
 bit app_flag_current_error; //电流AD错误
@@ -71,87 +71,24 @@ static uint8_t sleep_updata = 0; //用于标记在唤醒后一段时间内, 进�
 /*****************************
  * 电机控制输出
  * ********************************/
-static uint8_t temp = 0;
-#define PWM_MOTOR_SET_DUTY(x) temp = x
 static void motor_function(void)
 {
-	static uint8_t pulse_count = 0, new_mode = 0;
+	static uint8_t new_mode = 0;
 
 	if (app_flag_work)
 	{
 		if (new_mode == MODE_A)
 		{
-            pulse_count++;
-			if(pulse_count>=80)
-			{
-				pulse_count = 0;
-				if(new_mode!=app_mode)
-				{
-					new_mode = app_mode;
-					return;
-				}
-			}
-			if (pulse_count>=40)
-				PWM_MOTOR_SET_DUTY(PWM_DUTY_0);
-			else
-				PWM_MOTOR_SET_DUTY(PWM_DUTY_80);
-		}
-		else if (new_mode == MODE_B)
-		{
-            pulse_count++;
-			if(pulse_count>=60)
-			{
-				pulse_count = 0;
-				if(new_mode!=app_mode)
-				{
-					new_mode = app_mode;
-					return;
-				}
-			}
-			if (pulse_count>=30)
-				PWM_MOTOR_SET_DUTY(PWM_DUTY_0);
-			else
-				PWM_MOTOR_SET_DUTY(PWM_DUTY_80);
-		}
-		else if (new_mode == MODE_C)
-		{
-            pulse_count++;
-			if(pulse_count>=40)
-			{
-				pulse_count = 0;
-				if(new_mode!=app_mode)
-				{
-					new_mode = app_mode;
-					return;
-				}
-			}
-			if (pulse_count>=20)
-				PWM_MOTOR_SET_DUTY(PWM_DUTY_0);
-			else
-				PWM_MOTOR_SET_DUTY(PWM_DUTY_80);
+			PWM_MOTOR_SET_DUTY(PWM_DUTY_80);
 		}
 		else
 		{
-            pulse_count++;
-			if(pulse_count>=20)
-			{
-				pulse_count = 0;
-				if(new_mode!=app_mode)
-				{
-					new_mode = app_mode;
-					return;
-				}
-			}
-			if (pulse_count>=10)
-				PWM_MOTOR_SET_DUTY(PWM_DUTY_0);
-			else
-				PWM_MOTOR_SET_DUTY(PWM_DUTY_80);
+			PWM_MOTOR_SET_DUTY(PWM_DUTY_50);
 		}
 	}
 	else
 	{
 		PWM_MOTOR_SET_DUTY(PWM_DUTY_0);
-		pulse_count = 0;
 	}
 }
 
@@ -160,28 +97,30 @@ static void motor_function(void)
  * *****************/
 static void battery_deal(void)
 {
-	// Vref=3, 分压为1/2, Vin = 2*AD*3/4096+0.5(四舍五入), AD = (Vin)*4096/6+0.5(四舍五入)
-	// Vin = ((ADC_BATTERY_VALUE()>>4)*300+256)/1280
-
-	if (app_flag_sys_ready == 0 || sleep_updata)
+	static uint16_t temp1 = 1000, temp2 = 1000;
+	static uint8_t cnt = 0;
+	
+	//电池AD = 1.2*4096/VDD
+	// if (app_flag_sys_ready == 0 || sleep_updata)
 	{
-		if (ADC_BATTERY_VALUE() >= 4000) //voltage over high
+		if (ADC_BATTERY_VALUE()>=15&&ADC_BATTERY_VALUE()<=4080)
+		{
+			temp1 = ADC_BATTERY_VALUE()+15;
+			temp2 = ADC_BATTERY_VALUE()-15;
+		}
+		if (ADC_BATTERY_VALUE() <= 702) //7V voltage over high
 		{
 			app_battery_level = BATTERY_HIGH;
 		}
-		else if (ADC_BATTERY_VALUE() >= 2662) // 3.9V
+		else if (ADC_BATTERY_VALUE() <= 1293) // 3.8V
 		{
 			app_battery_level = BATTERY_FULL;
 		}
-		else if (ADC_BATTERY_VALUE() >= 2560) // 3.75V
-		{
-			app_battery_level = BATTERY_LV2;
-		}
-		else if (ADC_BATTERY_VALUE() >= 2389) // 3.5V
+		else if (ADC_BATTERY_VALUE() <= 1404) // 3.5V
 		{
 			app_battery_level = BATTERY_LV1;
 		}
-		else if (ADC_BATTERY_VALUE() >= 2219) // 3.25V
+		else if (ADC_BATTERY_VALUE() <= 1586) // 3.1V
 		{
 			app_battery_level = BATTERY_LV0;
 		}
@@ -192,26 +131,46 @@ static void battery_deal(void)
 		return;
 	}
 	
-	if(app_flag_usb_inserted)
+	if(ADC_BATTERY_VALUE()>=temp1||ADC_BATTERY_VALUE()<=temp2)
+	{
+		//如果变化较大则进行多次确认
+		if (ADC_BATTERY_VALUE()>=15&&ADC_BATTERY_VALUE()<=4080)
+		{
+			temp1 = ADC_BATTERY_VALUE()+15;
+			temp2 = ADC_BATTERY_VALUE()-15;
+		}
+		cnt++;
+		if (cnt>=8)
+			cnt = 0;
+		else
+			return;
+	}
+	else
+	{
+		if (ADC_BATTERY_VALUE()>=15&&ADC_BATTERY_VALUE()<=4080)
+		{
+			temp1 = ADC_BATTERY_VALUE()+15;
+			temp2 = ADC_BATTERY_VALUE()-15;
+		}
+		cnt = 0;
+	}
+
+	if(app_flag_usb_insert)
 	{
 		//单向往上走
-		if (ADC_BATTERY_VALUE() >= 4000) //voltage over high
+		if (ADC_BATTERY_VALUE() <= 702) //7V voltage over high
 		{
 			app_battery_level = BATTERY_HIGH;
 		}
-		else if (ADC_BATTERY_VALUE() >= 2662) // 3.9V
+		else if (ADC_BATTERY_VALUE() <= 1293) // 3.8V
 		{
 			app_battery_level = BATTERY_FULL;
 		}
-		else if (ADC_BATTERY_VALUE() >= 2560 && app_battery_level <= BATTERY_LV2) // 3.75V
-		{
-			app_battery_level = BATTERY_LV2;
-		}
-		else if (ADC_BATTERY_VALUE() >= 2389 && app_battery_level <= BATTERY_LV1) // 3.5V
+		else if (ADC_BATTERY_VALUE() <= 1404 && app_battery_level <= BATTERY_LV1) // 3.5V
 		{
 			app_battery_level = BATTERY_LV1;
 		}
-		else if (ADC_BATTERY_VALUE() >= 2219 && app_battery_level <= BATTERY_LV0) // 3.25V
+		else if (ADC_BATTERY_VALUE() <= 1586 && app_battery_level <= BATTERY_LV0) // 3.1V
 		{
 			app_battery_level = BATTERY_LV0;
 		}
@@ -219,23 +178,19 @@ static void battery_deal(void)
 	else
 	{
 		//单向往下走
-		if (ADC_BATTERY_VALUE() >= 4000) //voltage over high
+		if (ADC_BATTERY_VALUE() <= 702) //7V voltage over high
 		{
 			app_battery_level = BATTERY_HIGH;
 		}
-		else if (ADC_BATTERY_VALUE() >= 2662 && app_battery_level >= BATTERY_FULL) // 3.9V
+		else if (ADC_BATTERY_VALUE() <= 1293 && app_battery_level >= BATTERY_FULL) // 3.8V
 		{
 			app_battery_level = BATTERY_FULL;
 		}
-		else if (ADC_BATTERY_VALUE() >= 2560 && app_battery_level >= BATTERY_LV2) // 3.75V
-		{
-			app_battery_level = BATTERY_LV2;
-		}
-		else if (ADC_BATTERY_VALUE() >= 2389 && app_battery_level >= BATTERY_LV1) // 3.5V
+		else if (ADC_BATTERY_VALUE() <= 1404 && app_battery_level >= BATTERY_LV1) // 3.5V
 		{
 			app_battery_level = BATTERY_LV1;
 		}
-		else if (ADC_BATTERY_VALUE() >= 2219 && app_battery_level >= BATTERY_LV0) // 3.25V
+		else if (ADC_BATTERY_VALUE() <= 1586 && app_battery_level >= BATTERY_LV0) // 3.1V
 		{
 			app_battery_level = BATTERY_LV0;
 		}
@@ -287,6 +242,34 @@ static void sleep(void)
 	}
 }
 
+/*****************************
+ * 应用初始化
+ * **************************/
+static void app_init(void)
+{
+	//PADAUK bit type don not support init that global value
+	app_flag_sleep = 0; //睡眠
+	app_flag_sys_ready = 0; //系统准备完毕
+	app_flag_work = 0; //工作
+	app_flag_error = 0; //系统错误
+	app_flag_nc0 = 0;
+	app_flag_nc1 = 0;
+	app_flag_usb_insert = 0; //充电线插入
+	app_flag_charge_full = 0; //充满电
+	app_flag_ntc_error = 0; //ntc AD错误
+	app_flag_current_error = 0; //电流AD错误
+	app_flag_battery_error = 0; //电池AD错误
+	app_flag_temp_unit_C = 0; //系统温度单位
+	app_flag_disp_battery_level = 0; //显示电池电量
+	app_flag_nc2 = 0;
+	app_flag_nc3 = 0;
+	app_flag_nc4 = 0;	
+	app_timer_flag_200us = 0;
+	app_timer_flag_2ms = 0;
+	app_timer_flag_10ms = 0;
+	app_timer_flag_100ms = 0;
+}
+
 //应广单核MCU的main函数, 多核FPPA0, FPPA1, FPPA2...
 void FPPA0(void)
 {	
@@ -316,8 +299,13 @@ void FPPA0(void)
 	MTF_timer_init_handle();
     MTF_watch_dog_init();
 
+	app_init();
+
 	while (1)
 	{
+#ifndef DEBUG
+		MTF_watch_dog_feed();
+#endif
 		if (app_timer_flag_2ms)
 		{
 			app_timer_flag_2ms = 0;
@@ -332,8 +320,11 @@ void FPPA0(void)
 			// motor_current_deal();
 			event_produce();
 			event_handle();
-			motor_function();
-			Led_display();
+			if(!sleep_updata)
+			{
+				motor_function();
+				Led_display();
+			}
 		}
 
 		if (app_timer_flag_100ms)
@@ -357,7 +348,7 @@ void FPPA0(void)
 		sleep();
 
         //外设和程序测试
-#if 1
+#if 0
         $ PB.4 TOGGLE;
         .delay 8000;
         gpio_test();

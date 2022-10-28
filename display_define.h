@@ -7,7 +7,7 @@
  * 应用对应的led显存功能定义
  * **************************/
 #define Dsp_RESlocate(N) (LED_data_buf &= ~(N))
-#define Dsp_locate(N) (LED_data_buf |= (N))
+#define Dsp_locate(N) LED_data_buf |= N
 
 #define led1_locate Dsp_locate(0X01)
 #define led2_locate Dsp_locate(0X02)

@@ -6,8 +6,8 @@ uint8_t key_input_res = 0;
 #define KEY_PREVENT_SHAKE_TIME 50 //按键消抖时间10ms
 void key_input_check_timer(void) //定期运行输入检查
 {
-    static uint8_t i = 0, l = 0, charge_full = 0;
-    static uint16_t k = 0, pulse_cnt = 0, cnt_1s = 0;
+    static uint8_t i = 0, charge_full = 0;
+    static uint16_t k = 0, l = 0;
 
     key_input_res = 0;
     
@@ -28,42 +28,44 @@ void key_input_check_timer(void) //定期运行输入检查
     if (CHARGE_CHECK_PIN()) // usb插入
     {
         k++;
-        if (k >= 2500) //500ms
+        if (k >= 2000) //400ms
         {
-            k = 2500;
-            key_input_res |= 0X03;
+            k = 2000;
+            key_input_res |= 0X04;
         }
     }
     else // usb拔掉
     {
-        k = 0;
+        if (k > 0)
+        {
+            key_input_res |= 0X04;
+            k--;
+            // if (k > 500)
+            //     k = 500;
+        }
     }
 
     /********
-     *  SM5308充电指示1灯模式:
-        充电状态=LED1间断方波;
-        充满状态=LED1一直方波;
+     *  4054/4056充电指示:CHRG为充满状态, STD为外部电源插入状态, IO均设为输入上拉
+        充电状态:CHRG=0, STD=1;
+        充满状态:CHRG=1, STD=0;
+        改变PROG引脚电阻可改变充电电流
      * **********/
     if(CHARGE_FULL_PIN())
     {
-        l = 1;
+        l++;
+        if (l >= 1000) //200ms
+        {
+            l = 1000;
+            key_input_res |= 0X08;
+        }
     }
     else
     {
-        if (l)
-            pulse_cnt++;
-        l = 0;
+        if (l > 0)
+        {
+            key_input_res |= 0X08;
+            l--;
+        }
     }
-    cnt_1s++;
-    if (cnt_1s>=5000)
-    {
-        cnt_1s = 0;
-        if (pulse_cnt >= 400) //1秒内出现大量的方波为电池充满状态
-            charge_full = 1;
-        else
-            charge_full = 0;
-        pulse_cnt = 0;
-    }
-    if(charge_full)
-        key_input_res |= 0X08;
 }
