@@ -48,7 +48,9 @@ PROJECT=PRE_FILE
 ~display_define.h
 ~display_board.h
 ~envent_define.h
+~simulate_uart.h
 ~key_board.h
+~types_plus.h
 [PRE]
 ~Knif.PRJ
 ~Knif.PRE

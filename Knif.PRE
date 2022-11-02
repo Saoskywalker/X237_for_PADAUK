@@ -4,7 +4,7 @@
 	.Code_Option	Interrupt_Src1	PA.4
 	.Code_Option	Interrupt_Src0	PA.0
 	.Code_Option	LVR		2.5V
-	.Code_Option	Security	Enable		// Security 7/8 words Enable
+	.Code_Option	Security	Disable		// Security Disable
 	.Code_Option	GPC_PWM		Disable
 	.Code_Option	Bootup_Time	Fast
 	.Code_Option	PB4_PB7_Drive	Strong
