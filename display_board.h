@@ -10,7 +10,7 @@ void Led_Dis_Update(void);
 void Led_Clear_All(void);
 void Led_dis_All(void);
 void Led_Scan(void);
-// uint8_t Led_Display_exit(void);
-// uint8_t Led_Display_init(void);
+void Led_Display_exit(void);
+void Led_Display_init(void);
 
 #endif
