@@ -52,7 +52,7 @@ bit app_flag_sleep; //睡眠
 bit app_flag_sys_ready; //系统准备完毕
 bit app_flag_work; //工作
 bit app_flag_error; //系统错误
-bit app_flag_nc0;
+bit app_flag_sleep_updata; //用于标记在唤醒后一段时间内, 进行一定的唤醒处理
 bit app_flag_nc1;
 bit app_flag_usb_insert; //充电线插入
 bit app_flag_charge_full; //充满电
@@ -66,25 +66,15 @@ bit app_flag_nc3;
 bit app_flag_nc4;
 uint8_t app_mode = MODE_A;
 uint8_t app_battery_level = BATTERY_FULL;
-static uint8_t sleep_updata = 0; //用于标记在唤醒后一段时间内, 进行一定的唤醒处理
 
 /*****************************
  * 电机控制输出
  * ********************************/
 static void motor_function(void)
 {
-	static uint8_t new_mode = 0;
-
 	if (app_flag_work)
 	{
-		if (new_mode == MODE_A)
-		{
-			PWM_MOTOR_SET_DUTY(PWM_DUTY_80);
-		}
-		else
-		{
-			PWM_MOTOR_SET_DUTY(PWM_DUTY_50);
-		}
+		PWM_MOTOR_SET_DUTY(PWM_DUTY_80);
 	}
 	else
 	{
@@ -95,19 +85,15 @@ static void motor_function(void)
 /**************
  * 电池电量处理
  * *****************/
+
 static void battery_deal(void)
-{
-	static uint16_t temp1 = 1000, temp2 = 1000;
-	static uint8_t cnt = 0;
-	
+{	
+	static uint16_t __temp1 = 1000, __temp2 = 1000;
+	static uint8_t __cnt = 0;
+
 	//电池AD = 1.2*4096/VDD
-	// if (app_flag_sys_ready == 0 || sleep_updata)
+	if (app_flag_sys_ready == 0)// || app_flag_sleep_updata)
 	{
-		if (ADC_BATTERY_VALUE()>=15&&ADC_BATTERY_VALUE()<=4080)
-		{
-			temp1 = ADC_BATTERY_VALUE()+15;
-			temp2 = ADC_BATTERY_VALUE()-15;
-		}
 		if (ADC_BATTERY_VALUE() <= 702) //7V voltage over high
 		{
 			app_battery_level = BATTERY_HIGH;
@@ -118,41 +104,49 @@ static void battery_deal(void)
 		}
 		else if (ADC_BATTERY_VALUE() <= 1404) // 3.5V
 		{
-			app_battery_level = BATTERY_LV1;
+			app_battery_level = BATTERY_LV2;
 		}
 		else if (ADC_BATTERY_VALUE() <= 1586) // 3.1V
 		{
+			app_battery_level = BATTERY_LV1;
+		}
+		else if (ADC_BATTERY_VALUE() <= 1638) // 3.0V
+		{
 			app_battery_level = BATTERY_LV0;
 		}
-		else // 2.9V
+		else // 2.75V
 		{
 			app_battery_level = BATTERY_LOSE;
 		}
 		return;
 	}
-	
-	if(ADC_BATTERY_VALUE()>=temp1||ADC_BATTERY_VALUE()<=temp2)
+
+	//如果变化较大则进行多次确认
+	if (ADC_BATTERY_VALUE() >= __temp1 || ADC_BATTERY_VALUE() <= __temp2)
 	{
-		//如果变化较大则进行多次确认
-		if (ADC_BATTERY_VALUE()>=15&&ADC_BATTERY_VALUE()<=4080)
-		{
-			temp1 = ADC_BATTERY_VALUE()+15;
-			temp2 = ADC_BATTERY_VALUE()-15;
-		}
-		cnt++;
-		if (cnt>=8)
-			cnt = 0;
+		__temp1 = ADC_BATTERY_VALUE() + 32;
+		if (ADC_BATTERY_VALUE() >= 32)
+			__temp2 = ADC_BATTERY_VALUE() - 32;
 		else
-			return;
+			__temp2 = 0;
+
+		__cnt = 0;
+		return;
 	}
 	else
 	{
-		if (ADC_BATTERY_VALUE()>=15&&ADC_BATTERY_VALUE()<=4080)
+		//变化幅度大时重新确认, 变化幅度小时不重新确认
+		__temp1 = ADC_BATTERY_VALUE() + 32;
+		if (ADC_BATTERY_VALUE() >= 32)
+			__temp2 = ADC_BATTERY_VALUE() - 32;
+		else
+			__temp2 = 0;
+
+		if (__cnt < 9)
 		{
-			temp1 = ADC_BATTERY_VALUE()+15;
-			temp2 = ADC_BATTERY_VALUE()-15;
+			__cnt++;
+			return;
 		}
-		cnt = 0;
 	}
 
 	if(app_flag_usb_insert)
@@ -166,11 +160,15 @@ static void battery_deal(void)
 		{
 			app_battery_level = BATTERY_FULL;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1404 && app_battery_level <= BATTERY_LV1) // 3.5V
+		else if (ADC_BATTERY_VALUE() <= 1404 && app_battery_level <= BATTERY_LV2) // 3.5V
+		{
+			app_battery_level = BATTERY_LV2;
+		}
+		else if (ADC_BATTERY_VALUE() <= 1586 && app_battery_level <= BATTERY_LV1) // 3.1V
 		{
 			app_battery_level = BATTERY_LV1;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1586 && app_battery_level <= BATTERY_LV0) // 3.1V
+		else if (ADC_BATTERY_VALUE() <= 1638 && app_battery_level <= BATTERY_LV0) // 3.0V
 		{
 			app_battery_level = BATTERY_LV0;
 		}
@@ -186,11 +184,15 @@ static void battery_deal(void)
 		{
 			app_battery_level = BATTERY_FULL;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1404 && app_battery_level >= BATTERY_LV1) // 3.5V
+		else if (ADC_BATTERY_VALUE() <= 1404 && app_battery_level >= BATTERY_LV2) // 3.5V
+		{
+			app_battery_level = BATTERY_LV2;
+		}
+		else if (ADC_BATTERY_VALUE() <= 1586 && app_battery_level >= BATTERY_LV1) // 3.1V
 		{
 			app_battery_level = BATTERY_LV1;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1586 && app_battery_level >= BATTERY_LV0) // 3.1V
+		else if (ADC_BATTERY_VALUE() <= 1638 && app_battery_level >= BATTERY_LV0) // 3.0V
 		{
 			app_battery_level = BATTERY_LV0;
 		}
@@ -210,6 +212,7 @@ static void sleep(void)
 	
 	if(app_flag_sleep)
 	{
+		Led_Display_exit();
 		MM_adc1_suspend();
 		PWM_MOTOR_SUSPEND();
 		main_IO_exit();
@@ -220,10 +223,8 @@ static void sleep(void)
 			check_count = 0;
 			while (check_count < 300)
 			{
-#ifndef DEBUG
 				MTF_watch_dog_feed();
-#endif
-				sleep_updata = 1;
+				app_flag_sleep_updata = 1;
 				if (app_timer_flag_10ms)
 				{
 					app_timer_flag_10ms = 0;
@@ -239,6 +240,7 @@ static void sleep(void)
 		main_IO_init();
 		PWM_MOTOR_START();
 		MM_adc1_start();
+		Led_Display_init();
 	}
 }
 
@@ -252,7 +254,7 @@ static void app_init(void)
 	app_flag_sys_ready = 0; //系统准备完毕
 	app_flag_work = 0; //工作
 	app_flag_error = 0; //系统错误
-	app_flag_nc0 = 0;
+	app_flag_sleep_updata = 0; //用于标记在唤醒后一段时间内, 进行一定的唤醒处理
 	app_flag_nc1 = 0;
 	app_flag_usb_insert = 0; //充电线插入
 	app_flag_charge_full = 0; //充满电
@@ -270,6 +272,7 @@ static void app_init(void)
 	app_timer_flag_100ms = 0;
 }
 
+#include "simulate_uart.h"
 //应广单核MCU的main函数, 多核FPPA0, FPPA1, FPPA2...
 void FPPA0(void)
 {	
@@ -291,21 +294,25 @@ void FPPA0(void)
 	// while (--gwPoint$0);
     ///////////////////////////////////////////////////////////
     
-    uint8_t sys_read_delay = 0; 
-
+    uint8_t sys_read_delay = 0, sleep_updata_delay = 0; 
+	
+	uint16_t tempADC = 0;
+	uint8_t ccc = 0, itoc = 0;
+	
 	main_IO_init();
 	PWM_INIT();
 	MM_adc1_init();
 	MTF_timer_init_handle();
+	Led_Display_init();
+
     MTF_watch_dog_init();
 
 	app_init();
 
 	while (1)
 	{
-#ifndef DEBUG
 		MTF_watch_dog_feed();
-#endif
+
 		if (app_timer_flag_2ms)
 		{
 			app_timer_flag_2ms = 0;
@@ -318,10 +325,10 @@ void FPPA0(void)
 			// temp_deal();
 			battery_deal();
 			// motor_current_deal();
-			event_produce();
-			event_handle();
-			if(!sleep_updata)
+			if (app_flag_sleep_updata == 0)
 			{
+				event_produce();
+				event_handle();
 				motor_function();
 				Led_display();
 			}
@@ -338,12 +345,87 @@ void FPPA0(void)
 				{
 					sys_read_delay = 0;
 					app_flag_sys_ready = 1;
+					app_flag_disp_battery_level = 1;
 					app_flag_sleep = 0;
 					app_flag_work = 1;
 				}
 			}
-			sleep_updata = 0;
+
+			if (app_flag_sleep_updata)
+			{
+				sleep_updata_delay++;
+				if (sleep_updata_delay >= 2)
+				{
+					sleep_updata_delay = 0;
+					app_flag_sleep_updata = 0;
+				}
+			}
 		}
+
+#if 0
+		if(simulate_uart_send_cnt()==0) //uart打印调试
+		{
+			if(ccc==0)
+			{
+				simulate_uart_send_buffer('A');
+			}
+			else if(ccc==1)
+			{
+				simulate_uart_send_buffer('D');
+			}
+			else if(ccc==2)
+			{
+				simulate_uart_send_buffer(':');
+			}
+			else if(ccc==3)
+			{
+				itoc = ((tempADC&0XF000)>>12);
+				if(itoc>=10)
+					itoc = itoc-10+'A';
+				else
+					itoc = itoc+'0';
+				simulate_uart_send_buffer(itoc);
+			}
+			else if(ccc==4)
+			{
+				itoc = ((tempADC&0X0F00)>>8);
+				if(itoc>=10)
+					itoc = itoc-10+'A';
+				else
+					itoc = itoc+'0';
+				simulate_uart_send_buffer(itoc);
+			}
+			else if(ccc==5)
+			{
+				itoc = ((tempADC&0X00F0)>>4);
+				if(itoc>=10)
+					itoc = itoc-10+'A';
+				else
+					itoc = itoc+'0';
+				simulate_uart_send_buffer(itoc);
+			}
+			else if(ccc==6)
+			{
+				itoc = tempADC&0X000F;
+				if(itoc>=10)
+					itoc = itoc-10+'A';
+				else
+					itoc = itoc+'0';
+				simulate_uart_send_buffer(itoc);
+			}
+			else if(ccc==7)
+			{
+				simulate_uart_send_buffer(10);
+			}
+
+			ccc++;
+			if(ccc>7)
+			{
+				ccc = 0;
+				tempADC = ADC_BATTERY_VALUE();
+			}
+		}
+#endif
 		
 		sleep();
 

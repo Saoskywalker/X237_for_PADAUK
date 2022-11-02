@@ -8,11 +8,11 @@
 #define PWM_DUTY_80 204
 
 #define PWM_INIT() MM_pwm3_init()
-#define PWM_MOTOR_START() MM_pwm3_start()
+#define PWM_MOTOR_START() //MM_pwm3_start(); TM3B = 0 //PWM开启时默认无波形输出
 #define PWM_MOTOR_SUSPEND() MM_pwm3_suspend()
 #define PWM_MOTOR_SET_DUTY(x) {if(x==PWM_DUTY_0) \
-                                {PWM_MOTOR_SUSPEND();} \
+                                {MM_pwm3_suspend();} \
                                 else \
-                                {PWM_MOTOR_START();TM3B = x;}}
+                                {MM_pwm3_start(); TM3B = x;}}
 
 #endif
