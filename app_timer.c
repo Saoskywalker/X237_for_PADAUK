@@ -2,6 +2,7 @@
 #include "gpio_board.h"
 #include "display_define.h"
 #include "key_board.h"
+#include "simulate_uart.h"
 
 // timer_flag_type app_timer_flag= 0;// = {0, 0, 0, 0, 0, 0, 0, 0};
 bit app_timer_flag_200us;
@@ -16,9 +17,11 @@ void app_timer(void)
     // 200us int
     app_timer_flag_200us = 1;
     // TEST_TOGGLE_PIN();
+    // $ PA.6 TOGGLE;
 
+    // simulate_uart_send();
     key_input_check_timer();
-
+    
     count_2ms++;
     if (count_2ms >= 10)
     {
@@ -32,7 +35,7 @@ void app_timer(void)
         {
             count_10ms = 0;
             app_timer_flag_10ms = 1;
-// $ PA.6 TOGGLE;
+
             count_100ms++;
             if(count_100ms>=10)
             {

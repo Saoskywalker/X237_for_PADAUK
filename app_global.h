@@ -9,7 +9,7 @@
 //   uint8_t sys_ready : 1; //系统准备完毕
 //   uint8_t work : 1; //工作
 //   uint8_t error : 1; //系统错误
-//   uint8_t nc0 : 1;
+//   uint8_t sleep_updata : 1; //用于标记在唤醒后一段时间内, 进行一定的唤醒处理
 //   uint8_t nc1 : 1;
 //   uint8_t usb_inserted : 1; //充电线插入
 //   uint8_t charge_full : 1; //充满电
@@ -28,7 +28,7 @@ extern bit app_flag_sleep; //睡眠
 extern bit app_flag_sys_ready; //系统准备完毕
 extern bit app_flag_work; //工作
 extern bit app_flag_error; //系统错误
-extern bit app_flag_nc0;
+extern bit app_flag_sleep_updata; //用于标记在唤醒后一段时间内, 进行一定的唤醒处理
 extern bit app_flag_nc1;
 extern bit app_flag_usb_insert; //充电线插入
 extern bit app_flag_charge_full; //充满电
