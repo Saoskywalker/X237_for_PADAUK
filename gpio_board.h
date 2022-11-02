@@ -29,8 +29,8 @@
 
 //INPUT
 #define MOTOR_CURRENT_PIN() PB.1
-#define CHARGE_FULL_PIN() PA.4
-#define CHARGE_CHECK_PIN() PA.0
+#define IC4056_CHRG_PIN() PA.4
+#define IC4056_STDBY_PIN() PA.0
 #define POWER_KEY_PIN() PA.5
 
 void main_IO_init(void);

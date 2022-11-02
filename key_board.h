@@ -1,7 +1,7 @@
 #ifndef _KEY_BOARD_H
 #define _KEY_BOARD_H
 
-#include "types_base.h"
+#include "types_plus.h"
 
 extern uint8_t key_input_res;
 
